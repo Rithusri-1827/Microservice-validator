@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: governance-service
+  datasource:
+    url: ${MSVAL_DB_URL}
+    username: ${MSVAL_DB_USER}
+    password: ${MSVAL_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 50
+      leak-detection-threshold: 10000   # [S1] leak detection mandate
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true    # /actuator/health/liveness + /readiness — dogfooding (ADR-008)
+
+msval:
+  queue-bound: ${MSVAL_QUEUE_BOUND:128}
+  dedup-window-s: ${MSVAL_DEDUP_WINDOW_S:60}
+  alert-batch-ms: ${MSVAL_ALERT_BATCH_MS:500}
+  settle-delay-s: ${MSVAL_SETTLE_DELAY_S:120}
+  report-interval-s: ${MSVAL_REPORT_INTERVAL_S:300}
+  sweep-interval-s: ${MSVAL_SWEEP_INTERVAL_S:3600}
+  stale-factor: ${MSVAL_STALE_FACTOR:3}
+  gateway-port: ${MSVAL_GATEWAY_PORT:7402}
+  alert-port: ${MSVAL_ALERT_PORT:7403}
+  api-token: ${MSVAL_API_TOKEN}
