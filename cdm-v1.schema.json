@@ -1,0 +1,764 @@
+{
+  "$defs": {
+    "Connection": {
+      "additionalProperties": false,
+      "properties": {
+        "to": {
+          "minLength": 1,
+          "title": "To",
+          "type": "string"
+        },
+        "authenticated": {
+          "title": "Authenticated",
+          "type": "boolean"
+        },
+        "authorized": {
+          "title": "Authorized",
+          "type": "boolean"
+        },
+        "encrypted": {
+          "title": "Encrypted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "to",
+        "authenticated",
+        "authorized",
+        "encrypted"
+      ],
+      "title": "Connection",
+      "type": "object"
+    },
+    "Container": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "image": {
+          "$ref": "#/$defs/Image"
+        },
+        "security": {
+          "$ref": "#/$defs/Security"
+        },
+        "resources": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Resources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "probes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Probes"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "env_refs": {
+          "items": {
+            "$ref": "#/$defs/EnvRef"
+          },
+          "title": "Env Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "image"
+      ],
+      "title": "Container",
+      "type": "object"
+    },
+    "EnvRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "EnvRef",
+      "type": "object"
+    },
+    "Image": {
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "title": "Repository",
+          "type": "string"
+        },
+        "registry": {
+          "default": "",
+          "title": "Registry",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        },
+        "pinned": {
+          "title": "Pinned",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "repository",
+        "ref",
+        "pinned"
+      ],
+      "title": "Image",
+      "type": "object"
+    },
+    "Jvm": {
+      "additionalProperties": false,
+      "properties": {
+        "max_heap": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Heap"
+        },
+        "tool_options": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Options"
+        }
+      },
+      "title": "Jvm",
+      "type": "object"
+    },
+    "Layer": {
+      "enum": [
+        "Edge",
+        "Aggregator",
+        "Domain",
+        "Integrator",
+        "Broker"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "Logging": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "direct_central": {
+          "title": "Direct Central",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "direct_central"
+      ],
+      "title": "Logging",
+      "type": "object"
+    },
+    "Pdb": {
+      "additionalProperties": false,
+      "properties": {
+        "min_available": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Min Available"
+        }
+      },
+      "required": [
+        "min_available"
+      ],
+      "title": "Pdb",
+      "type": "object"
+    },
+    "Probe": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "port": {
+          "title": "Port",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "port"
+      ],
+      "title": "Probe",
+      "type": "object"
+    },
+    "Probes": {
+      "additionalProperties": false,
+      "properties": {
+        "liveness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Probe"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "readiness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Probe"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "startup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StartupProbe"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Probes",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source_format": {
+          "title": "Source Format",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "normalizer_version": {
+          "title": "Normalizer Version",
+          "type": "string"
+        },
+        "unmapped_paths": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmapped Paths",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_format",
+        "normalizer_version"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ResourceClaims": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu Expr"
+        },
+        "ram_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ram Expr"
+        },
+        "vars": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Vars",
+          "type": "array"
+        }
+      },
+      "title": "ResourceClaims",
+      "type": "object"
+    },
+    "ResourcePair": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu"
+        },
+        "memory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory"
+        }
+      },
+      "title": "ResourcePair",
+      "type": "object"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourcePair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "limits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourcePair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Resources",
+      "type": "object"
+    },
+    "RuntimePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "tls_min": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tls Min"
+        },
+        "encrypted_volumes": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Encrypted Volumes"
+        }
+      },
+      "title": "RuntimePolicy",
+      "type": "object"
+    },
+    "Security": {
+      "additionalProperties": false,
+      "properties": {
+        "run_as_non_root": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run As Non Root"
+        },
+        "allow_privilege_escalation": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Privilege Escalation"
+        },
+        "read_only_root_fs": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Only Root Fs"
+        },
+        "capabilities_dropped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities Dropped",
+          "type": "array"
+        }
+      },
+      "title": "Security",
+      "type": "object"
+    },
+    "Service": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "layer": {
+          "$ref": "#/$defs/Layer"
+        },
+        "team": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "layer"
+      ],
+      "title": "Service",
+      "type": "object"
+    },
+    "StartupProbe": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "port": {
+          "title": "Port",
+          "type": "integer"
+        },
+        "failure_threshold": {
+          "default": 3,
+          "title": "Failure Threshold",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "port"
+      ],
+      "title": "StartupProbe",
+      "type": "object"
+    },
+    "Strategy": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "default": "RollingUpdate",
+          "title": "Type",
+          "type": "string"
+        },
+        "max_surge": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Surge"
+        },
+        "max_unavailable": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Unavailable"
+        }
+      },
+      "title": "Strategy",
+      "type": "object"
+    },
+    "Topology": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_point": {
+          "default": false,
+          "title": "Entry Point",
+          "type": "boolean"
+        },
+        "connections": {
+          "items": {
+            "$ref": "#/$defs/Connection"
+          },
+          "title": "Connections",
+          "type": "array"
+        },
+        "logging": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Logging"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Topology",
+      "type": "object"
+    },
+    "Version": {
+      "additionalProperties": false,
+      "properties": {
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "image_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Digest"
+        }
+      },
+      "required": [
+        "tag"
+      ],
+      "title": "Version",
+      "type": "object"
+    },
+    "Workload": {
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "minimum": 0,
+          "title": "Replicas",
+          "type": "integer"
+        },
+        "strategy": {
+          "$ref": "#/$defs/Strategy"
+        },
+        "termination_grace_seconds": {
+          "default": 30,
+          "maximum": 3600,
+          "minimum": 0,
+          "title": "Termination Grace Seconds",
+          "type": "integer"
+        },
+        "pdb": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pdb"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "containers": {
+          "items": {
+            "$ref": "#/$defs/Container"
+          },
+          "minItems": 1,
+          "title": "Containers",
+          "type": "array"
+        },
+        "jvm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Jvm"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "replicas",
+        "containers"
+      ],
+      "title": "Workload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cdm_version": {
+      "default": "1.0",
+      "title": "Cdm Version",
+      "type": "string"
+    },
+    "service": {
+      "$ref": "#/$defs/Service"
+    },
+    "version": {
+      "$ref": "#/$defs/Version"
+    },
+    "environment": {
+      "title": "Environment",
+      "type": "string"
+    },
+    "workload": {
+      "$ref": "#/$defs/Workload"
+    },
+    "runtime_policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimePolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "resource_claims": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResourceClaims"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "topology": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Topology"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    }
+  },
+  "required": [
+    "service",
+    "version",
+    "environment",
+    "workload",
+    "provenance"
+  ],
+  "title": "CDMDocument",
+  "type": "object"
+}
