@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: Microservices Validator Governance Internal API
+  version: 0.2.0
+  summary: Normative internal operational API for Governance Plane health probes.
+  description: The pilot Governance Plane is a modular monolith. Domain-module interactions are in-process calls
+    and are intentionally not HTTP APIs. This internal listener therefore exposes only operational liveness and
+    readiness probes. Adding a domain operation requires an ADR, a service-split trigger, and an update to this
+    contract; it must not be inferred from INTERNAL arrows in architecture diagrams.
+x-msval-boundary: governance-internal
+servers:
+- url: http://governance-plane.internal
+  description: Cluster-internal operational listener; never exposed through public ingress
+tags:
+- name: Health
+security: []
+paths:
+  /health/liveness:
+    get:
+      tags:
+      - Health
+      operationId: getLiveness
+      security: []
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /health/readiness:
+    get:
+      tags:
+      - Health
+      operationId: getReadiness
+      security: []
+      responses:
+        '200':
+          description: Decision path dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    ServiceUnavailable:
+      description: An authoritative dependency is unavailable; callers must not treat this as an allow.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - checkedAt
+      properties:
+        status:
+          type: string
+          enum:
+          - UP
+          - DEGRADED
+          - DOWN
+        checkedAt:
+          type: string
+          format: date-time
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+            - UP
+            - DEGRADED
+            - DOWN
+    ProblemDetails:
+      type: object
+      additionalProperties: true
+      required:
+      - type
+      - title
+      - status
+      - code
+      - detail
+      - correlationId
+      - retryable
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          enum:
+          - INVALID_REQUEST
+          - UNAUTHENTICATED
+          - FORBIDDEN
+          - NOT_FOUND
+          - IDEMPOTENCY_KEY_REUSED
+          - STALE_POLICY
+          - UNTRUSTED_EVALUATOR
+          - VALIDATION_EVIDENCE_MISSING
+          - VALIDATION_EVIDENCE_STALE
+          - ARTIFACT_DIGEST_MISMATCH
+          - DECISION_EXPIRED
+          - SEPARATION_OF_DUTY_VIOLATION
+          - VERSION_CONFLICT
+          - DEPENDENCY_UNAVAILABLE
+          - INTERNAL_ERROR
+        detail:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+        retryable:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - path
+            - message
+            properties:
+              path:
+                type: string
+              message:
+                type: string
