@@ -7,3 +7,4 @@ __pycache__/
 governance-service/target/
 quarantine/
 pgdata/
+.pub

@@ -1,0 +1,1773 @@
+openapi: 3.1.0
+info:
+  title: Microservices Validator UI API
+  version: 0.2.0
+  summary: Normative API used by the Rio governance workbench.
+  description: This contract is the user-facing API consumed by the unprivileged Rio presentation layer. It exposes
+    read models and authorized workflow commands for validation evidence, decisions, findings, waivers, service
+    posture, and scope/service selectors. Rio has no database credentials and cannot call Governance Plane internal
+    modules directly.
+x-msval-boundary: ui
+servers:
+- url: https://governance.example.internal
+  description: Deployment-specific governance-plane endpoint
+tags:
+- name: Validation runs
+- name: Decisions
+- name: Findings
+- name: Waivers
+- name: Services
+security:
+- bearerAuth: []
+paths:
+  /v1/validation-runs/{validationRunId}:
+    get:
+      tags:
+      - Validation runs
+      operationId: getValidationRun
+      parameters:
+      - $ref: '#/components/parameters/ValidationRunIdPath'
+      responses:
+        '200':
+          description: Validation run with results and linked finding identifiers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/estate-scopes:
+    get:
+      tags:
+      - Services
+      operationId: listEstateScopes
+      parameters:
+      - name: active
+        in: query
+        schema:
+          type: boolean
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Cursor-paginated estate scopes visible to the caller.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateScopePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/estate-scopes/{scopeId}:
+    get:
+      tags:
+      - Services
+      operationId: getEstateScope
+      parameters:
+      - $ref: '#/components/parameters/ScopeIdPath'
+      responses:
+        '200':
+          description: Estate scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateScopeResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/services/{serviceKey}:
+    get:
+      tags:
+      - Services
+      operationId: getService
+      parameters:
+      - $ref: '#/components/parameters/ServiceKeyPath'
+      responses:
+        '200':
+          description: Registered service and repository binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/decisions/{decisionId}:
+    get:
+      tags:
+      - Decisions
+      operationId: getDecision
+      parameters:
+      - $ref: '#/components/parameters/DecisionIdPath'
+      responses:
+        '200':
+          description: Immutable decision and rule results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/findings:
+    get:
+      tags:
+      - Findings
+      operationId: listFindings
+      parameters:
+      - name: serviceKey
+        in: query
+        schema:
+          $ref: '#/components/schemas/ServiceKey'
+      - name: environment
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/FindingStatus'
+      - name: severity
+        in: query
+        schema:
+          $ref: '#/components/schemas/Severity'
+      - name: sourceStage
+        in: query
+        schema:
+          $ref: '#/components/schemas/FindingSourceStage'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Cursor-paginated findings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/findings/{findingId}:
+    get:
+      tags:
+      - Findings
+      operationId: getFinding
+      parameters:
+      - $ref: '#/components/parameters/FindingIdPath'
+      responses:
+        '200':
+          description: Finding with current state and lifecycle events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/findings/{findingId}/transitions:
+    post:
+      tags:
+      - Findings
+      operationId: transitionFinding
+      summary: Assign, comment, resolve, or reopen a finding using optimistic version control.
+      parameters:
+      - $ref: '#/components/parameters/FindingIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FindingTransition'
+      responses:
+        '200':
+          description: Finding transition committed with its append-only event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/findings/{findingId}/acknowledgements:
+    post:
+      tags:
+      - Findings
+      operationId: acknowledgeFinding
+      parameters:
+      - $ref: '#/components/parameters/FindingIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FindingAcknowledgement'
+      responses:
+        '200':
+          description: Finding acknowledged or reassigned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/waiver-requests:
+    post:
+      tags:
+      - Waivers
+      operationId: createWaiverRequest
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaiverRequestSubmission'
+      responses:
+        '201':
+          description: Waiver request created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaiverRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/waiver-requests/{waiverRequestId}/decisions:
+    post:
+      tags:
+      - Waivers
+      operationId: decideWaiverRequest
+      parameters:
+      - $ref: '#/components/parameters/WaiverRequestIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaiverDecisionSubmission'
+      responses:
+        '200':
+          description: Waiver request approved or rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaiverDecisionReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/waiver-requests/{waiverRequestId}:
+    get:
+      tags:
+      - Waivers
+      operationId: getWaiverRequest
+      parameters:
+      - $ref: '#/components/parameters/WaiverRequestIdPath'
+      responses:
+        '200':
+          description: Waiver request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaiverRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/waiver-requests/{waiverRequestId}/cancellation:
+    post:
+      tags:
+      - Waivers
+      operationId: cancelWaiverRequest
+      parameters:
+      - $ref: '#/components/parameters/WaiverRequestIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentCommand'
+      responses:
+        '200':
+          description: Pending waiver request cancelled by its requester. Administrators revoke an approved waiver
+            through the waiver revocation endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaiverRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/waivers:
+    get:
+      tags:
+      - Waivers
+      operationId: listWaivers
+      parameters:
+      - name: findingId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: activeAt
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Cursor-paginated waivers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaiverPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/waivers/{waiverId}/revocations:
+    post:
+      tags:
+      - Waivers
+      operationId: revokeWaiver
+      parameters:
+      - $ref: '#/components/parameters/WaiverIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentCommand'
+      responses:
+        '200':
+          description: Active waiver revoked and the associated finding reopened when still applicable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Waiver'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/services/{serviceKey}/posture:
+    get:
+      tags:
+      - Services
+      operationId: getServicePosture
+      parameters:
+      - $ref: '#/components/parameters/ServiceKeyPath'
+      - name: environment
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current governance posture assembled from declarations, decisions, deployments, findings,
+            and optional observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePosture'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._:-]+$
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+        maxLength: 512
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    ScopeIdPath:
+      name: scopeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ServiceKeyPath:
+      name: serviceKey
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ServiceKey'
+    ValidationRunIdPath:
+      name: validationRunId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DecisionIdPath:
+      name: decisionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FindingIdPath:
+      name: findingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WaiverRequestIdPath:
+      name: waiverRequestId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WaiverIdPath:
+      name: waiverId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Request syntax or semantic validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: The authenticated subject is not authorized for this operation or scope.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Resource was not found or is not visible to the caller.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: State, version, digest, or idempotency conflict.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    ServiceKey:
+      type: string
+      minLength: 3
+      maxLength: 200
+      pattern: ^[a-z0-9][a-z0-9._/-]*[a-z0-9]$
+    Digest:
+      type: string
+      pattern: ^sha256:[a-f0-9]{64}$
+    Gate:
+      type: string
+      enum:
+      - DESIGN
+      - PR
+      - PRE_DEPLOY
+      - ADMISSION
+      - RUNTIME
+    Severity:
+      type: string
+      enum:
+      - INFO
+      - LOW
+      - MEDIUM
+      - HIGH
+      - CRITICAL
+    RuleOutcome:
+      type: string
+      enum:
+      - PASS
+      - WARN
+      - FAIL
+      - ERROR
+      - SKIP
+    Verdict:
+      type: string
+      enum:
+      - PASS
+      - WARN
+      - FAIL
+    DecisionVerdict:
+      type: string
+      enum:
+      - ALLOW
+      - DENY
+      - ADVISORY
+      - UNDECIDABLE
+    FindingStatus:
+      type: string
+      enum:
+      - OPEN
+      - ACKNOWLEDGED
+      - WAIVED
+      - RESOLVED
+    FindingSourceStage:
+      type: string
+      enum:
+      - CI
+      - PRE_DEPLOY
+      - DEPLOYMENT_EVIDENCE
+      - POLICY_IMPACT
+      - RUNTIME
+    EstateScope:
+      type: object
+      required:
+      - environment
+      properties:
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 64
+        cluster:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+        region:
+          type:
+          - string
+          - 'null'
+          maxLength: 64
+        tenant:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+    EstateScopeRegistration:
+      allOf:
+      - $ref: '#/components/schemas/EstateScope'
+      - type: object
+        required:
+        - displayName
+        properties:
+          displayName:
+            type: string
+            minLength: 1
+            maxLength: 200
+    EstateScopeResource:
+      allOf:
+      - $ref: '#/components/schemas/EstateScopeRegistration'
+      - type: object
+        required:
+        - scopeId
+        - active
+        - createdAt
+        properties:
+          scopeId:
+            type: string
+            format: uuid
+          active:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+          deactivatedAt:
+            type:
+            - string
+            - 'null'
+            format: date-time
+    EstateScopePage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EstateScopeResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+    RepositoryIdentity:
+      type: object
+      additionalProperties: false
+      required:
+      - provider
+      - organization
+      - repository
+      properties:
+        provider:
+          type: string
+          enum:
+          - GITHUB
+          - GITLAB
+          - AZURE_DEVOPS
+          - BITBUCKET
+          - OTHER
+        organization:
+          type: string
+          minLength: 1
+          maxLength: 200
+        repository:
+          type: string
+          minLength: 1
+          maxLength: 200
+        url:
+          type:
+          - string
+          - 'null'
+          format: uri
+    ServiceRegistration:
+      type: object
+      required:
+      - displayName
+      - ownerKey
+      - repository
+      - allowedScopeIds
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 300
+        ownerKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+        repository:
+          $ref: '#/components/schemas/RepositoryIdentity'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 200
+        allowedScopeIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    ServiceResource:
+      allOf:
+      - $ref: '#/components/schemas/ServiceRegistration'
+      - type: object
+        required:
+        - serviceId
+        - serviceKey
+        - active
+        - createdAt
+        - updatedAt
+        properties:
+          serviceId:
+            type: string
+            format: uuid
+          serviceKey:
+            $ref: '#/components/schemas/ServiceKey'
+          active:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+          updatedAt:
+            type: string
+            format: date-time
+          deactivatedAt:
+            type:
+            - string
+            - 'null'
+            format: date-time
+    SourceRevision:
+      type: object
+      additionalProperties: false
+      required:
+      - commitSha
+      - refType
+      - refName
+      properties:
+        commitSha:
+          type: string
+          pattern: ^[a-fA-F0-9]{40,64}$
+        refType:
+          type: string
+          enum:
+          - BRANCH
+          - TAG
+          - PULL_REQUEST
+        refName:
+          type: string
+          minLength: 1
+          maxLength: 512
+        pullRequestNumber:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+    ArtifactReference:
+      type: object
+      additionalProperties: false
+      required:
+      - artifactObjectId
+      - digest
+      - mediaType
+      properties:
+        artifactObjectId:
+          type: string
+          format: uuid
+        digest:
+          $ref: '#/components/schemas/Digest'
+        mediaType:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sizeBytes:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    PolicySelector:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - priority
+        properties:
+          kind:
+            type: string
+            const: ALL
+          priority:
+            type: integer
+            minimum: 0
+            maximum: 10000
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - priority
+        - serviceKeys
+        properties:
+          kind:
+            type: string
+            const: SERVICE_KEYS
+          priority:
+            type: integer
+            minimum: 0
+            maximum: 10000
+          serviceKeys:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items:
+              $ref: '#/components/schemas/ServiceKey'
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - priority
+        - matchLabels
+        properties:
+          kind:
+            type: string
+            const: LABELS
+          priority:
+            type: integer
+            minimum: 0
+            maximum: 10000
+          matchLabels:
+            type: object
+            minProperties: 1
+            additionalProperties:
+              type: string
+              maxLength: 200
+    PolicyResolution:
+      type: object
+      additionalProperties: false
+      required:
+      - activationId
+      - artifactId
+      - artifactVersion
+      - artifactDigest
+      - gate
+      - scope
+      - enforcementMode
+      - resolvedSelector
+      - evaluatorAbi
+      - downloadUrl
+      - resolvedAt
+      properties:
+        activationId:
+          type: string
+          format: uuid
+        artifactId:
+          type: string
+          format: uuid
+        artifactVersion:
+          type: string
+          minLength: 1
+          maxLength: 100
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        gate:
+          $ref: '#/components/schemas/Gate'
+        scope:
+          $ref: '#/components/schemas/EstateScope'
+        enforcementMode:
+          type: string
+          enum:
+          - OBSERVE
+          - WARN
+          - BLOCK
+        resolvedSelector:
+          $ref: '#/components/schemas/PolicySelector'
+        downloadUrl:
+          type: string
+          format: uri-reference
+        signature:
+          type:
+          - string
+          - 'null'
+        evaluatorAbi:
+          type: string
+          minLength: 1
+          maxLength: 100
+        resolvedAt:
+          type: string
+          format: date-time
+    EvaluatorIdentity:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - version
+      - abi
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        abi:
+          type: string
+          minLength: 1
+          maxLength: 100
+    ObjectReference:
+      type: object
+      additionalProperties: false
+      properties:
+        apiVersion:
+          type:
+          - string
+          - 'null'
+        kind:
+          type:
+          - string
+          - 'null'
+        namespace:
+          type:
+          - string
+          - 'null'
+        name:
+          type:
+          - string
+          - 'null'
+        documentIndex:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    SourceLocation:
+      type: object
+      additionalProperties: false
+      properties:
+        file:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        jsonPointer:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+        line:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        column:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+    RuleResult:
+      type: object
+      additionalProperties: false
+      required:
+      - resultKey
+      - ruleId
+      - severity
+      - outcome
+      - message
+      properties:
+        resultKey:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Stable client-generated key for idempotent result/finding reconciliation.
+        ruleId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        ruleVersion:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        severity:
+          $ref: '#/components/schemas/Severity'
+        outcome:
+          $ref: '#/components/schemas/RuleOutcome'
+        message:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        remediation:
+          type:
+          - string
+          - 'null'
+          maxLength: 8000
+        documentationUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+        objectRef:
+          $ref: '#/components/schemas/ObjectReference'
+        sourceLocation:
+          $ref: '#/components/schemas/SourceLocation'
+        evidence:
+          type: object
+          additionalProperties: true
+    ValidationRunSubmission:
+      type: object
+      required:
+      - clientRunId
+      - repository
+      - source
+      - serviceKey
+      - gate
+      - targetScope
+      - complete
+      - inputArtifact
+      - architectureDigest
+      - policyActivationId
+      - policyDigest
+      - evaluator
+      - verdict
+      - startedAt
+      - completedAt
+      - results
+      properties:
+        clientRunId:
+          type: string
+          format: uuid
+        repository:
+          $ref: '#/components/schemas/RepositoryIdentity'
+        source:
+          $ref: '#/components/schemas/SourceRevision'
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        serviceVersion:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        gate:
+          $ref: '#/components/schemas/Gate'
+        targetScope:
+          $ref: '#/components/schemas/EstateScope'
+        complete:
+          type: boolean
+        inputArtifact:
+          $ref: '#/components/schemas/ArtifactReference'
+        architectureDigest:
+          $ref: '#/components/schemas/Digest'
+        policyActivationId:
+          type: string
+          format: uuid
+        policyDigest:
+          $ref: '#/components/schemas/Digest'
+        evaluator:
+          $ref: '#/components/schemas/EvaluatorIdentity'
+        verdict:
+          $ref: '#/components/schemas/Verdict'
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: '#/components/schemas/RuleResult'
+    ValidationRunReceipt:
+      type: object
+      required:
+      - validationRunId
+      - ingestionStatus
+      - acceptedAt
+      - findingSummary
+      properties:
+        validationRunId:
+          type: string
+          format: uuid
+        ingestionStatus:
+          type: string
+          enum:
+          - ACCEPTED
+          - STALE_POLICY
+          - UNTRUSTED_EVALUATOR
+          - REJECTED
+        acceptedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        findingSummary:
+          $ref: '#/components/schemas/FindingMutationSummary'
+        currentPolicyResolution:
+          oneOf:
+          - $ref: '#/components/schemas/PolicyResolution'
+          - type: 'null'
+    ValidationRun:
+      allOf:
+      - $ref: '#/components/schemas/ValidationRunSubmission'
+      - $ref: '#/components/schemas/ValidationRunReceipt'
+      - type: object
+        properties:
+          submittedBy:
+            type: string
+          correlationId:
+            type: string
+            format: uuid
+          linkedFindingIds:
+            type: array
+            items:
+              type: string
+              format: uuid
+    FindingMutationSummary:
+      type: object
+      additionalProperties: false
+      required:
+      - opened
+      - updated
+      - resolved
+      - unchanged
+      properties:
+        opened:
+          type: integer
+          minimum: 0
+        updated:
+          type: integer
+          minimum: 0
+        resolved:
+          type: integer
+          minimum: 0
+        unchanged:
+          type: integer
+          minimum: 0
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - serviceKey
+      - serviceVersion
+      - targetScope
+      - intent
+      - artifactDigest
+      - architectureDigest
+      - validationRunId
+      properties:
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        serviceVersion:
+          type: string
+          minLength: 1
+          maxLength: 200
+        targetScope:
+          $ref: '#/components/schemas/EstateScope'
+        intent:
+          type: string
+          enum:
+          - DEPLOY
+          - PROMOTE
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        architectureDigest:
+          $ref: '#/components/schemas/Digest'
+        validationRunId:
+          type: string
+          format: uuid
+    DecisionContextSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - snapshotId
+      - schemaVersion
+      - digest
+      - artifactDigest
+      - artifactObjectId
+      - factWatermarks
+      - appliedWaiverIds
+      - capturedAt
+      properties:
+        snapshotId:
+          type: string
+          format: uuid
+        schemaVersion:
+          type: string
+          minLength: 1
+          maxLength: 100
+        digest:
+          $ref: '#/components/schemas/Digest'
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        artifactObjectId:
+          type: string
+          format: uuid
+        factWatermarks:
+          type: object
+          additionalProperties:
+            type: string
+        appliedWaiverIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+    Decision:
+      type: object
+      additionalProperties: false
+      required:
+      - decisionId
+      - request
+      - verdict
+      - policyActivationId
+      - policyDigest
+      - evaluator
+      - decidedAt
+      - expiresAt
+      - contextSnapshot
+      - results
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+        request:
+          $ref: '#/components/schemas/DecisionRequest'
+        verdict:
+          $ref: '#/components/schemas/DecisionVerdict'
+        policyActivationId:
+          type: string
+          format: uuid
+        policyDigest:
+          $ref: '#/components/schemas/Digest'
+        evaluator:
+          $ref: '#/components/schemas/EvaluatorIdentity'
+        decidedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        contextSnapshot:
+          $ref: '#/components/schemas/DecisionContextSnapshot'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleResult'
+    Finding:
+      type: object
+      additionalProperties: false
+      required:
+      - findingId
+      - findingKeyVersion
+      - findingKey
+      - affectedObjectKey
+      - serviceKey
+      - sourceStage
+      - ruleId
+      - severity
+      - status
+      - title
+      - firstSeenAt
+      - lastSeenAt
+      - occurrenceCount
+      - version
+      properties:
+        findingId:
+          type: string
+          format: uuid
+        findingKeyVersion:
+          type: integer
+          const: 1
+        findingKey:
+          $ref: '#/components/schemas/Digest'
+        affectedObjectKey:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 1000
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        scope:
+          $ref: '#/components/schemas/EstateScope'
+        sourceStage:
+          $ref: '#/components/schemas/FindingSourceStage'
+        ruleId:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/FindingStatus'
+        title:
+          type: string
+          maxLength: 500
+        detail:
+          type:
+          - string
+          - 'null'
+          maxLength: 16000
+        assignedTo:
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        occurrenceCount:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          minimum: 1
+    FindingEvent:
+      type: object
+      additionalProperties: false
+      required:
+      - findingEventId
+      - eventType
+      - toStatus
+      - actor
+      - occurredAt
+      properties:
+        findingEventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum:
+          - OPENED
+          - OBSERVED
+          - ACKNOWLEDGED
+          - ASSIGNED
+          - WAIVED
+          - WAIVER_EXPIRED
+          - RESOLVED
+          - REOPENED
+          - COMMENTED
+        fromStatus:
+          oneOf:
+          - $ref: '#/components/schemas/FindingStatus'
+          - type: 'null'
+        toStatus:
+          $ref: '#/components/schemas/FindingStatus'
+        actor:
+          type: string
+        comment:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type: string
+          format: date-time
+    FindingDetail:
+      type: object
+      additionalProperties: false
+      required:
+      - finding
+      - events
+      properties:
+        finding:
+          $ref: '#/components/schemas/Finding'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/FindingEvent'
+    FindingTransition:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      - expectedVersion
+      - comment
+      properties:
+        action:
+          type: string
+          enum:
+          - ASSIGN
+          - COMMENT
+          - RESOLVE
+          - REOPEN
+        expectedVersion:
+          type: integer
+          minimum: 1
+        assignedTo:
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 8000
+      allOf:
+      - if:
+          properties:
+            action:
+              const: ASSIGN
+        then:
+          required:
+          - assignedTo
+    FindingPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+    FindingAcknowledgement:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - comment
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        assignedTo:
+          type:
+          - string
+          - 'null'
+          maxLength: 300
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    WaiverRequestSubmission:
+      type: object
+      required:
+      - findingId
+      - reason
+      - requestedUntil
+      properties:
+        findingId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 8000
+        requestedUntil:
+          type: string
+          format: date-time
+        compensatingControls:
+          type:
+          - string
+          - 'null'
+          maxLength: 8000
+    WaiverRequest:
+      allOf:
+      - $ref: '#/components/schemas/WaiverRequestSubmission'
+      - type: object
+        required:
+        - waiverRequestId
+        - status
+        - requestedBy
+        - requestedAt
+        properties:
+          waiverRequestId:
+            type: string
+            format: uuid
+          status:
+            type: string
+            enum:
+            - PENDING
+            - APPROVED
+            - REJECTED
+            - CANCELLED
+          requestedBy:
+            type: string
+          requestedAt:
+            type: string
+            format: date-time
+    WaiverDecisionSubmission:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required:
+        - decision
+        - approvedUntil
+        - comment
+        properties:
+          decision:
+            type: string
+            const: APPROVE
+          approvedUntil:
+            type: string
+            format: date-time
+          comment:
+            type: string
+            minLength: 1
+            maxLength: 8000
+      - type: object
+        additionalProperties: false
+        required:
+        - decision
+        - comment
+        properties:
+          decision:
+            type: string
+            const: REJECT
+          comment:
+            type: string
+            minLength: 1
+            maxLength: 8000
+    WaiverDecisionReceipt:
+      type: object
+      additionalProperties: false
+      required:
+      - waiverRequestId
+      - status
+      - decidedBy
+      - decidedAt
+      properties:
+        waiverRequestId:
+          type: string
+          format: uuid
+        waiverId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        status:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+    CommentCommand:
+      type: object
+      additionalProperties: false
+      required:
+      - comment
+      properties:
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 8000
+    Waiver:
+      type: object
+      additionalProperties: false
+      required:
+      - waiverId
+      - waiverRequestId
+      - findingId
+      - ruleId
+      - serviceKey
+      - approvedBy
+      - approvedAt
+      - expiresAt
+      - status
+      properties:
+        waiverId:
+          type: string
+          format: uuid
+        waiverRequestId:
+          type: string
+          format: uuid
+        findingId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        scope:
+          $ref: '#/components/schemas/EstateScope'
+        artifactDigest:
+          oneOf:
+          - $ref: '#/components/schemas/Digest'
+          - type: 'null'
+        approvedBy:
+          type: string
+        approvedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - EXPIRED
+          - REVOKED
+        revokedBy:
+          type:
+          - string
+          - 'null'
+        revokedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    WaiverPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Waiver'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+    ServicePosture:
+      type: object
+      additionalProperties: false
+      required:
+      - serviceKey
+      - openFindingCounts
+      - runtimeAssurance
+      properties:
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        currentDeclarationId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        latestValidationRunId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        latestDecisionId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        latestDeploymentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        openFindingCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        runtimeAssurance:
+          type: string
+          enum:
+          - NOT_ENABLED
+          - CURRENT
+          - STALE
+          - UNAVAILABLE
+    ProblemDetails:
+      type: object
+      additionalProperties: true
+      required:
+      - type
+      - title
+      - status
+      - code
+      - detail
+      - correlationId
+      - retryable
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          enum:
+          - INVALID_REQUEST
+          - UNAUTHENTICATED
+          - FORBIDDEN
+          - NOT_FOUND
+          - IDEMPOTENCY_KEY_REUSED
+          - STALE_POLICY
+          - UNTRUSTED_EVALUATOR
+          - VALIDATION_EVIDENCE_MISSING
+          - VALIDATION_EVIDENCE_STALE
+          - ARTIFACT_DIGEST_MISMATCH
+          - DECISION_EXPIRED
+          - SEPARATION_OF_DUTY_VIOLATION
+          - VERSION_CONFLICT
+          - DEPENDENCY_UNAVAILABLE
+          - INTERNAL_ERROR
+        detail:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+        retryable:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - path
+            - message
+            properties:
+              path:
+                type: string
+              message:
+                type: string

@@ -1,0 +1,1995 @@
+openapi: 3.1.0
+info:
+  title: Microservices Validator Edge API
+  version: 0.2.0
+  summary: Normative API used by CLI, CI/CD, policy pipelines, deployment hooks, and optional collectors.
+  description: This contract is the authenticated machine-to-machine boundary for Edge and delivery tooling. It
+    covers central policy synchronization, controlled artifact transfer, CI validation publication, service/scope
+    onboarding, authoritative deployment decisions, deployment evidence, and the separately gated runtime-observation
+    extension. Rio browser workflows are defined in the UI API contract.
+x-msval-boundary: edge
+servers:
+- url: https://governance.example.internal
+  description: Deployment-specific governance-plane endpoint
+tags:
+- name: Policies
+- name: Validation runs
+- name: Declarations
+- name: Decisions
+- name: Deployments
+- name: Services
+- name: Observations
+security:
+- bearerAuth: []
+paths:
+  /v1/policy-resolutions:
+    get:
+      tags:
+      - Policies
+      operationId: resolveActivePolicy
+      summary: Resolve the policy artifact active for a service, gate, and estate scope.
+      parameters:
+      - name: serviceKey
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/ServiceKey'
+      - name: gate
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/Gate'
+      - name: environment
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: cluster
+        in: query
+        schema:
+          type: string
+          maxLength: 128
+      - name: region
+        in: query
+        schema:
+          type: string
+          maxLength: 64
+      - name: tenant
+        in: query
+        schema:
+          type: string
+          maxLength: 128
+      responses:
+        '200':
+          description: Active policy resolution.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResolution'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/policy-artifacts/{digest}/content:
+    get:
+      tags:
+      - Policies
+      operationId: downloadPolicyArtifact
+      summary: Download an immutable policy artifact by digest.
+      parameters:
+      - $ref: '#/components/parameters/DigestPath'
+      - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Immutable policy artifact.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Digest:
+              schema:
+                $ref: '#/components/schemas/Digest'
+            X-Policy-Signature:
+              description: Base64-encoded detached signature when artifact signing is enabled.
+              schema:
+                type: string
+          content:
+            application/vnd.msval.policy+gzip:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The caller already holds these immutable artifact bytes.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Digest:
+              schema:
+                $ref: '#/components/schemas/Digest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/artifact-uploads:
+    post:
+      tags:
+      - Policies
+      operationId: initiateArtifactUpload
+      summary: Initiate a controlled upload for policy, evidence, manifest, or observation content.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactUploadRequest'
+      responses:
+        '201':
+          description: Upload slot created with a short-lived destination.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactUploadSlot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/artifact-uploads/{artifactObjectId}/complete:
+    post:
+      tags:
+      - Policies
+      operationId: completeArtifactUpload
+      summary: Verify the uploaded object's digest and make it available for registration.
+      parameters:
+      - $ref: '#/components/parameters/ArtifactObjectIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactUploadCompletion'
+      responses:
+        '200':
+          description: Upload verified and finalized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/policy-artifacts:
+    post:
+      tags:
+      - Policies
+      operationId: registerPolicyArtifact
+      summary: Register a tested immutable policy artifact built by the protected policy pipeline.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyArtifactRegistration'
+      responses:
+        '201':
+          description: Artifact registered.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyArtifact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/policy-activations:
+    post:
+      tags:
+      - Policies
+      operationId: activatePolicyArtifact
+      summary: Activate or roll back to an immutable policy artifact for a gate and scope.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyActivationRequest'
+      responses:
+        '201':
+          description: Activation created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyActivation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/validation-runs:
+    post:
+      tags:
+      - Validation runs
+      operationId: publishValidationRun
+      summary: Publish an authenticated CI validation run and its complete rule-result set.
+      description: 'Only an accepted complete run can reconcile central CI-stage findings. A stale policy
+
+        activation is retained as evidence but cannot satisfy an enforced gate or mutate active findings.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationRunSubmission'
+      responses:
+        '201':
+          description: Validation run accepted and findings reconciled.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRunReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The policy activation changed. The retained run is returned as `STALE_POLICY`. Idempotency
+            conflicts use `ProblemDetails` from the generic conflict response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRunReceipt'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Retained run was produced by an untrusted evaluator or rejected after semantic validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRunReceipt'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/validation-runs/{validationRunId}:
+    get:
+      tags:
+      - Validation runs
+      operationId: getValidationRun
+      parameters:
+      - $ref: '#/components/parameters/ValidationRunIdPath'
+      responses:
+        '200':
+          description: Validation run with results and linked finding identifiers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/estate-scopes:
+    get:
+      tags:
+      - Services
+      operationId: listEstateScopes
+      parameters:
+      - name: active
+        in: query
+        schema:
+          type: boolean
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Cursor-paginated estate scopes visible to the caller.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateScopePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+      - Services
+      operationId: createEstateScope
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EstateScopeRegistration'
+      responses:
+        '201':
+          description: Estate scope created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateScopeResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/estate-scopes/{scopeId}:
+    get:
+      tags:
+      - Services
+      operationId: getEstateScope
+      parameters:
+      - $ref: '#/components/parameters/ScopeIdPath'
+      responses:
+        '200':
+          description: Estate scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateScopeResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Services
+      operationId: updateEstateScopeLifecycle
+      parameters:
+      - $ref: '#/components/parameters/ScopeIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleUpdate'
+      responses:
+        '200':
+          description: Estate scope lifecycle updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateScopeResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/services/{serviceKey}:
+    get:
+      tags:
+      - Services
+      operationId: getService
+      parameters:
+      - $ref: '#/components/parameters/ServiceKeyPath'
+      responses:
+        '200':
+          description: Registered service and repository binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+      - Services
+      operationId: registerOrUpdateService
+      summary: Administrator-managed onboarding and repository-to-service identity binding.
+      parameters:
+      - $ref: '#/components/parameters/ServiceKeyPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRegistration'
+      responses:
+        '200':
+          description: Existing service registration updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResource'
+        '201':
+          description: Service registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/services/{serviceKey}/lifecycle:
+    patch:
+      tags:
+      - Services
+      operationId: updateServiceLifecycle
+      parameters:
+      - $ref: '#/components/parameters/ServiceKeyPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleUpdate'
+      responses:
+        '200':
+          description: Service lifecycle updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/declarations/{serviceKey}:
+    put:
+      tags:
+      - Declarations
+      operationId: publishArchitectureDeclaration
+      summary: Publish the architecture declaration accepted from a protected repository ref.
+      parameters:
+      - $ref: '#/components/parameters/ServiceKeyPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchitectureDeclarationPublication'
+      responses:
+        '200':
+          description: Existing declaration digest already current.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchitectureDeclaration'
+        '201':
+          description: Declaration version published.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchitectureDeclaration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/decisions:
+    post:
+      tags:
+      - Decisions
+      operationId: createDecision
+      summary: Request an authoritative estate-contextual decision.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '201':
+          description: Immutable decision created.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Required CI validation evidence is missing, stale, incomplete, or mismatched.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/decisions/{decisionId}:
+    get:
+      tags:
+      - Decisions
+      operationId: getDecision
+      parameters:
+      - $ref: '#/components/parameters/DecisionIdPath'
+      responses:
+        '200':
+          description: Immutable decision and rule results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/deployment-events:
+    post:
+      tags:
+      - Deployments
+      operationId: publishDeploymentEvent
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentEventSubmission'
+      responses:
+        '202':
+          description: Deployment evidence accepted idempotently.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentEventReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/observations:
+    post:
+      tags:
+      - Observations
+      operationId: publishObservation
+      summary: MVP 5 read-only collector endpoint.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObservationSubmission'
+      responses:
+        '202':
+          description: Observation accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._:-]+$
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 160
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+        maxLength: 512
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    DigestPath:
+      name: digest
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Digest'
+    ArtifactObjectIdPath:
+      name: artifactObjectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScopeIdPath:
+      name: scopeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ServiceKeyPath:
+      name: serviceKey
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ServiceKey'
+    ValidationRunIdPath:
+      name: validationRunId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DecisionIdPath:
+      name: decisionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  headers:
+    CorrelationId:
+      description: End-to-end request correlation identifier.
+      schema:
+        type: string
+        format: uuid
+    ETag:
+      description: Strong content validator for the immutable policy digest.
+      schema:
+        type: string
+    Location:
+      description: URI of the created resource.
+      schema:
+        type: string
+        format: uri-reference
+  responses:
+    BadRequest:
+      description: Request syntax or semantic validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: The authenticated subject is not authorized for this operation or scope.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Resource was not found or is not visible to the caller.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: State, version, digest, or idempotency conflict.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ServiceUnavailable:
+      description: An authoritative dependency is unavailable; callers must not treat this as an allow.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    ServiceKey:
+      type: string
+      minLength: 3
+      maxLength: 200
+      pattern: ^[a-z0-9][a-z0-9._/-]*[a-z0-9]$
+    Digest:
+      type: string
+      pattern: ^sha256:[a-f0-9]{64}$
+    Gate:
+      type: string
+      enum:
+      - DESIGN
+      - PR
+      - PRE_DEPLOY
+      - ADMISSION
+      - RUNTIME
+    Severity:
+      type: string
+      enum:
+      - INFO
+      - LOW
+      - MEDIUM
+      - HIGH
+      - CRITICAL
+    RuleOutcome:
+      type: string
+      enum:
+      - PASS
+      - WARN
+      - FAIL
+      - ERROR
+      - SKIP
+    Verdict:
+      type: string
+      enum:
+      - PASS
+      - WARN
+      - FAIL
+    DecisionVerdict:
+      type: string
+      enum:
+      - ALLOW
+      - DENY
+      - ADVISORY
+      - UNDECIDABLE
+    EstateScope:
+      type: object
+      required:
+      - environment
+      properties:
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 64
+        cluster:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+        region:
+          type:
+          - string
+          - 'null'
+          maxLength: 64
+        tenant:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+    EstateScopeRegistration:
+      allOf:
+      - $ref: '#/components/schemas/EstateScope'
+      - type: object
+        required:
+        - displayName
+        properties:
+          displayName:
+            type: string
+            minLength: 1
+            maxLength: 200
+    EstateScopeResource:
+      allOf:
+      - $ref: '#/components/schemas/EstateScopeRegistration'
+      - type: object
+        required:
+        - scopeId
+        - active
+        - createdAt
+        properties:
+          scopeId:
+            type: string
+            format: uuid
+          active:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+          deactivatedAt:
+            type:
+            - string
+            - 'null'
+            format: date-time
+    EstateScopePage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EstateScopeResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+    LifecycleUpdate:
+      type: object
+      additionalProperties: false
+      required:
+      - active
+      - reason
+      properties:
+        active:
+          type: boolean
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 2000
+    RepositoryIdentity:
+      type: object
+      additionalProperties: false
+      required:
+      - provider
+      - organization
+      - repository
+      properties:
+        provider:
+          type: string
+          enum:
+          - GITHUB
+          - GITLAB
+          - AZURE_DEVOPS
+          - BITBUCKET
+          - OTHER
+        organization:
+          type: string
+          minLength: 1
+          maxLength: 200
+        repository:
+          type: string
+          minLength: 1
+          maxLength: 200
+        url:
+          type:
+          - string
+          - 'null'
+          format: uri
+    ServiceRegistration:
+      type: object
+      required:
+      - displayName
+      - ownerKey
+      - repository
+      - allowedScopeIds
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 300
+        ownerKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+        repository:
+          $ref: '#/components/schemas/RepositoryIdentity'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 200
+        allowedScopeIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    ServiceResource:
+      allOf:
+      - $ref: '#/components/schemas/ServiceRegistration'
+      - type: object
+        required:
+        - serviceId
+        - serviceKey
+        - active
+        - createdAt
+        - updatedAt
+        properties:
+          serviceId:
+            type: string
+            format: uuid
+          serviceKey:
+            $ref: '#/components/schemas/ServiceKey'
+          active:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+          updatedAt:
+            type: string
+            format: date-time
+          deactivatedAt:
+            type:
+            - string
+            - 'null'
+            format: date-time
+    SourceRevision:
+      type: object
+      additionalProperties: false
+      required:
+      - commitSha
+      - refType
+      - refName
+      properties:
+        commitSha:
+          type: string
+          pattern: ^[a-fA-F0-9]{40,64}$
+        refType:
+          type: string
+          enum:
+          - BRANCH
+          - TAG
+          - PULL_REQUEST
+        refName:
+          type: string
+          minLength: 1
+          maxLength: 512
+        pullRequestNumber:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+    ArtifactReference:
+      type: object
+      additionalProperties: false
+      required:
+      - artifactObjectId
+      - digest
+      - mediaType
+      properties:
+        artifactObjectId:
+          type: string
+          format: uuid
+        digest:
+          $ref: '#/components/schemas/Digest'
+        mediaType:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sizeBytes:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    ArtifactUploadRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - kind
+      - digest
+      - mediaType
+      - sizeBytes
+      properties:
+        kind:
+          type: string
+          enum:
+          - POLICY
+          - RENDERED_MANIFEST
+          - ARCHITECTURE_DECLARATION
+          - DECISION_CONTEXT
+          - RUNTIME_OBSERVATION
+        digest:
+          $ref: '#/components/schemas/Digest'
+        mediaType:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sizeBytes:
+          type: integer
+          minimum: 1
+    ArtifactUploadSlot:
+      type: object
+      additionalProperties: false
+      required:
+      - artifactObjectId
+      - uploadUrl
+      - method
+      - requiredHeaders
+      - expiresAt
+      properties:
+        artifactObjectId:
+          type: string
+          format: uuid
+        uploadUrl:
+          type: string
+          format: uri
+        method:
+          type: string
+          const: PUT
+        requiredHeaders:
+          type: object
+          additionalProperties:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+    ArtifactUploadCompletion:
+      type: object
+      additionalProperties: false
+      required:
+      - digest
+      - sizeBytes
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest'
+        sizeBytes:
+          type: integer
+          minimum: 1
+    ArtifactObject:
+      type: object
+      additionalProperties: false
+      required:
+      - artifactObjectId
+      - kind
+      - digest
+      - mediaType
+      - sizeBytes
+      - status
+      - verifiedAt
+      properties:
+        artifactObjectId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - POLICY
+          - RENDERED_MANIFEST
+          - ARCHITECTURE_DECLARATION
+          - DECISION_CONTEXT
+          - RUNTIME_OBSERVATION
+        digest:
+          $ref: '#/components/schemas/Digest'
+        mediaType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+          - PENDING
+          - VERIFIED
+          - REJECTED
+        verifiedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    PolicySelector:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - priority
+        properties:
+          kind:
+            type: string
+            const: ALL
+          priority:
+            type: integer
+            minimum: 0
+            maximum: 10000
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - priority
+        - serviceKeys
+        properties:
+          kind:
+            type: string
+            const: SERVICE_KEYS
+          priority:
+            type: integer
+            minimum: 0
+            maximum: 10000
+          serviceKeys:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items:
+              $ref: '#/components/schemas/ServiceKey'
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - priority
+        - matchLabels
+        properties:
+          kind:
+            type: string
+            const: LABELS
+          priority:
+            type: integer
+            minimum: 0
+            maximum: 10000
+          matchLabels:
+            type: object
+            minProperties: 1
+            additionalProperties:
+              type: string
+              maxLength: 200
+    PolicyResolution:
+      type: object
+      additionalProperties: false
+      required:
+      - activationId
+      - artifactId
+      - artifactVersion
+      - artifactDigest
+      - gate
+      - scope
+      - enforcementMode
+      - resolvedSelector
+      - evaluatorAbi
+      - downloadUrl
+      - resolvedAt
+      properties:
+        activationId:
+          type: string
+          format: uuid
+        artifactId:
+          type: string
+          format: uuid
+        artifactVersion:
+          type: string
+          minLength: 1
+          maxLength: 100
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        gate:
+          $ref: '#/components/schemas/Gate'
+        scope:
+          $ref: '#/components/schemas/EstateScope'
+        enforcementMode:
+          type: string
+          enum:
+          - OBSERVE
+          - WARN
+          - BLOCK
+        resolvedSelector:
+          $ref: '#/components/schemas/PolicySelector'
+        downloadUrl:
+          type: string
+          format: uri-reference
+        signature:
+          type:
+          - string
+          - 'null'
+        evaluatorAbi:
+          type: string
+          minLength: 1
+          maxLength: 100
+        resolvedAt:
+          type: string
+          format: date-time
+    PolicyArtifactRegistration:
+      type: object
+      required:
+      - version
+      - digest
+      - mediaType
+      - artifactObjectId
+      - evaluatorAbi
+      - sourceCommit
+      - ruleCount
+      properties:
+        version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        digest:
+          $ref: '#/components/schemas/Digest'
+        mediaType:
+          type: string
+          const: application/vnd.msval.policy+gzip
+        artifactObjectId:
+          type: string
+          format: uuid
+        evaluatorAbi:
+          type: string
+          minLength: 1
+          maxLength: 100
+        sourceRepository:
+          type:
+          - string
+          - 'null'
+          format: uri
+        sourceCommit:
+          type: string
+          pattern: ^[a-fA-F0-9]{40,64}$
+        signature:
+          type:
+          - string
+          - 'null'
+        ruleCount:
+          type: integer
+          minimum: 1
+        testSummary:
+          type: object
+          additionalProperties: false
+          properties:
+            passed:
+              type: integer
+              minimum: 0
+            failed:
+              type: integer
+              minimum: 0
+    PolicyArtifact:
+      allOf:
+      - $ref: '#/components/schemas/PolicyArtifactRegistration'
+      - type: object
+        required:
+        - artifactId
+        - createdAt
+        - createdBy
+        properties:
+          artifactId:
+            type: string
+            format: uuid
+          createdAt:
+            type: string
+            format: date-time
+          createdBy:
+            type: string
+    PolicyActivationRequest:
+      type: object
+      required:
+      - artifactId
+      - gate
+      - scope
+      - selector
+      - enforcementMode
+      - reason
+      properties:
+        artifactId:
+          type: string
+          format: uuid
+        gate:
+          $ref: '#/components/schemas/Gate'
+        scope:
+          $ref: '#/components/schemas/EstateScope'
+        selector:
+          $ref: '#/components/schemas/PolicySelector'
+        enforcementMode:
+          type: string
+          enum:
+          - OBSERVE
+          - WARN
+          - BLOCK
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 2000
+    PolicyActivation:
+      allOf:
+      - $ref: '#/components/schemas/PolicyActivationRequest'
+      - type: object
+        required:
+        - activationId
+        - activatedAt
+        - activatedBy
+        properties:
+          activationId:
+            type: string
+            format: uuid
+          activatedAt:
+            type: string
+            format: date-time
+          activatedBy:
+            type: string
+    EvaluatorIdentity:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - version
+      - abi
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        version:
+          type: string
+          minLength: 1
+          maxLength: 100
+        abi:
+          type: string
+          minLength: 1
+          maxLength: 100
+    ObjectReference:
+      type: object
+      additionalProperties: false
+      properties:
+        apiVersion:
+          type:
+          - string
+          - 'null'
+        kind:
+          type:
+          - string
+          - 'null'
+        namespace:
+          type:
+          - string
+          - 'null'
+        name:
+          type:
+          - string
+          - 'null'
+        documentIndex:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    SourceLocation:
+      type: object
+      additionalProperties: false
+      properties:
+        file:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        jsonPointer:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+        line:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        column:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+    RuleResult:
+      type: object
+      additionalProperties: false
+      required:
+      - resultKey
+      - ruleId
+      - severity
+      - outcome
+      - message
+      properties:
+        resultKey:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Stable client-generated key for idempotent result/finding reconciliation.
+        ruleId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        ruleVersion:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        severity:
+          $ref: '#/components/schemas/Severity'
+        outcome:
+          $ref: '#/components/schemas/RuleOutcome'
+        message:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        remediation:
+          type:
+          - string
+          - 'null'
+          maxLength: 8000
+        documentationUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+        objectRef:
+          $ref: '#/components/schemas/ObjectReference'
+        sourceLocation:
+          $ref: '#/components/schemas/SourceLocation'
+        evidence:
+          type: object
+          additionalProperties: true
+    ValidationRunSubmission:
+      type: object
+      required:
+      - clientRunId
+      - repository
+      - source
+      - serviceKey
+      - gate
+      - targetScope
+      - complete
+      - inputArtifact
+      - architectureDigest
+      - policyActivationId
+      - policyDigest
+      - evaluator
+      - verdict
+      - startedAt
+      - completedAt
+      - results
+      properties:
+        clientRunId:
+          type: string
+          format: uuid
+        repository:
+          $ref: '#/components/schemas/RepositoryIdentity'
+        source:
+          $ref: '#/components/schemas/SourceRevision'
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        serviceVersion:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        gate:
+          $ref: '#/components/schemas/Gate'
+        targetScope:
+          $ref: '#/components/schemas/EstateScope'
+        complete:
+          type: boolean
+        inputArtifact:
+          $ref: '#/components/schemas/ArtifactReference'
+        architectureDigest:
+          $ref: '#/components/schemas/Digest'
+        policyActivationId:
+          type: string
+          format: uuid
+        policyDigest:
+          $ref: '#/components/schemas/Digest'
+        evaluator:
+          $ref: '#/components/schemas/EvaluatorIdentity'
+        verdict:
+          $ref: '#/components/schemas/Verdict'
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: '#/components/schemas/RuleResult'
+    ValidationRunReceipt:
+      type: object
+      required:
+      - validationRunId
+      - ingestionStatus
+      - acceptedAt
+      - findingSummary
+      properties:
+        validationRunId:
+          type: string
+          format: uuid
+        ingestionStatus:
+          type: string
+          enum:
+          - ACCEPTED
+          - STALE_POLICY
+          - UNTRUSTED_EVALUATOR
+          - REJECTED
+        acceptedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        findingSummary:
+          $ref: '#/components/schemas/FindingMutationSummary'
+        currentPolicyResolution:
+          oneOf:
+          - $ref: '#/components/schemas/PolicyResolution'
+          - type: 'null'
+    ValidationRun:
+      allOf:
+      - $ref: '#/components/schemas/ValidationRunSubmission'
+      - $ref: '#/components/schemas/ValidationRunReceipt'
+      - type: object
+        properties:
+          submittedBy:
+            type: string
+          correlationId:
+            type: string
+            format: uuid
+          linkedFindingIds:
+            type: array
+            items:
+              type: string
+              format: uuid
+    FindingMutationSummary:
+      type: object
+      additionalProperties: false
+      required:
+      - opened
+      - updated
+      - resolved
+      - unchanged
+      properties:
+        opened:
+          type: integer
+          minimum: 0
+        updated:
+          type: integer
+          minimum: 0
+        resolved:
+          type: integer
+          minimum: 0
+        unchanged:
+          type: integer
+          minimum: 0
+    ArchitectureDeclarationPublication:
+      type: object
+      required:
+      - repository
+      - source
+      - digest
+      - apiVersion
+      - document
+      properties:
+        repository:
+          $ref: '#/components/schemas/RepositoryIdentity'
+        source:
+          $ref: '#/components/schemas/SourceRevision'
+        digest:
+          $ref: '#/components/schemas/Digest'
+        apiVersion:
+          type: string
+          const: msval.io/v1alpha1
+        document:
+          type: object
+          additionalProperties: true
+    ArchitectureDeclaration:
+      allOf:
+      - $ref: '#/components/schemas/ArchitectureDeclarationPublication'
+      - type: object
+        required:
+        - declarationId
+        - serviceKey
+        - publishedAt
+        - publishedBy
+        properties:
+          declarationId:
+            type: string
+            format: uuid
+          serviceKey:
+            $ref: '#/components/schemas/ServiceKey'
+          publishedAt:
+            type: string
+            format: date-time
+          publishedBy:
+            type: string
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - serviceKey
+      - serviceVersion
+      - targetScope
+      - intent
+      - artifactDigest
+      - architectureDigest
+      - validationRunId
+      properties:
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        serviceVersion:
+          type: string
+          minLength: 1
+          maxLength: 200
+        targetScope:
+          $ref: '#/components/schemas/EstateScope'
+        intent:
+          type: string
+          enum:
+          - DEPLOY
+          - PROMOTE
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        architectureDigest:
+          $ref: '#/components/schemas/Digest'
+        validationRunId:
+          type: string
+          format: uuid
+    DecisionContextSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - snapshotId
+      - schemaVersion
+      - digest
+      - artifactDigest
+      - artifactObjectId
+      - factWatermarks
+      - appliedWaiverIds
+      - capturedAt
+      properties:
+        snapshotId:
+          type: string
+          format: uuid
+        schemaVersion:
+          type: string
+          minLength: 1
+          maxLength: 100
+        digest:
+          $ref: '#/components/schemas/Digest'
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        artifactObjectId:
+          type: string
+          format: uuid
+        factWatermarks:
+          type: object
+          additionalProperties:
+            type: string
+        appliedWaiverIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+    Decision:
+      type: object
+      additionalProperties: false
+      required:
+      - decisionId
+      - request
+      - verdict
+      - policyActivationId
+      - policyDigest
+      - evaluator
+      - decidedAt
+      - expiresAt
+      - contextSnapshot
+      - results
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+        request:
+          $ref: '#/components/schemas/DecisionRequest'
+        verdict:
+          $ref: '#/components/schemas/DecisionVerdict'
+        policyActivationId:
+          type: string
+          format: uuid
+        policyDigest:
+          $ref: '#/components/schemas/Digest'
+        evaluator:
+          $ref: '#/components/schemas/EvaluatorIdentity'
+        decidedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        contextSnapshot:
+          $ref: '#/components/schemas/DecisionContextSnapshot'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleResult'
+    DeploymentEventSubmission:
+      type: object
+      additionalProperties: false
+      required:
+      - eventId
+      - decisionId
+      - serviceKey
+      - serviceVersion
+      - targetScope
+      - artifactDigest
+      - outcome
+      - deployedAt
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        decisionId:
+          type: string
+          format: uuid
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        serviceVersion:
+          type: string
+          minLength: 1
+          maxLength: 200
+        targetScope:
+          $ref: '#/components/schemas/EstateScope'
+        artifactDigest:
+          $ref: '#/components/schemas/Digest'
+        outcome:
+          type: string
+          enum:
+          - SUCCEEDED
+          - FAILED
+          - ROLLED_BACK
+        deployedAt:
+          type: string
+          format: date-time
+        externalDeploymentId:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+    DeploymentEventReceipt:
+      type: object
+      additionalProperties: false
+      required:
+      - eventId
+      - deploymentId
+      - status
+      - receivedAt
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        deploymentId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - ACCEPTED
+          - DUPLICATE
+        receivedAt:
+          type: string
+          format: date-time
+    ObservationSubmission:
+      type: object
+      additionalProperties: false
+      required:
+      - observationId
+      - collectorId
+      - serviceKey
+      - scope
+      - observedAt
+      - contentDigest
+      - changed
+      properties:
+        observationId:
+          type: string
+          format: uuid
+        collectorId:
+          type: string
+          minLength: 1
+          maxLength: 300
+        serviceKey:
+          $ref: '#/components/schemas/ServiceKey'
+        scope:
+          $ref: '#/components/schemas/EstateScope'
+        observedAt:
+          type: string
+          format: date-time
+        contentDigest:
+          $ref: '#/components/schemas/Digest'
+        changed:
+          type: boolean
+        deploymentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        payloadArtifactObjectId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      allOf:
+      - if:
+          properties:
+            changed:
+              const: true
+        then:
+          required:
+          - payloadArtifactObjectId
+          properties:
+            payloadArtifactObjectId:
+              type: string
+              format: uuid
+      - if:
+          properties:
+            changed:
+              const: false
+        then:
+          properties:
+            payloadArtifactObjectId:
+              type: 'null'
+    ObservationReceipt:
+      type: object
+      additionalProperties: false
+      required:
+      - observationId
+      - status
+      - receivedAt
+      properties:
+        observationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - ACCEPTED
+          - DUPLICATE
+        receivedAt:
+          type: string
+          format: date-time
+    ProblemDetails:
+      type: object
+      additionalProperties: true
+      required:
+      - type
+      - title
+      - status
+      - code
+      - detail
+      - correlationId
+      - retryable
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          enum:
+          - INVALID_REQUEST
+          - UNAUTHENTICATED
+          - FORBIDDEN
+          - NOT_FOUND
+          - IDEMPOTENCY_KEY_REUSED
+          - STALE_POLICY
+          - UNTRUSTED_EVALUATOR
+          - VALIDATION_EVIDENCE_MISSING
+          - VALIDATION_EVIDENCE_STALE
+          - ARTIFACT_DIGEST_MISMATCH
+          - DECISION_EXPIRED
+          - SEPARATION_OF_DUTY_VIOLATION
+          - VERSION_CONFLICT
+          - DEPENDENCY_UNAVAILABLE
+          - INTERNAL_ERROR
+        detail:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+        retryable:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - path
+            - message
+            properties:
+              path:
+                type: string
+              message:
+                type: string
